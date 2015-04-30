@@ -1,5 +1,5 @@
 //
-//  ViewController.h
+//  WebViewController.h
 //  Beacon Demo
 //
 //  Created by Severin Schoepke on 29/04/15.
@@ -8,8 +8,10 @@
 
 #import <UIKit/UIKit.h>
 
-@interface ViewController : UIViewController
+@interface WebViewController : UIViewController
 
+@property (strong, nonatomic) NSURL *url;
+
+- (instancetype)initWithURL:(NSURL *)url;
 
 @end
-

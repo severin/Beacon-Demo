@@ -7,39 +7,153 @@
 //
 
 #import "AppDelegate.h"
+#import "WebViewController.h"
 
-@interface AppDelegate ()
+#import <CoreLocation/CoreLocation.h>
+
+#define REGIONS @{ \
+    @"H&M Plakat Demo" : @{ \
+        @"uuid" : @"521BE3E0-0E18-4D39-900A-B001F5D69D3E", \
+        @"notification" : @"Haben Sie das H&M Plakat gesehen? Entdecken Sie die schlichte Eleganz des fernen Ostens in unseren Geschäften. Hier mehr erfahren", \
+        @"url" : @"http://www.hm.com/ch/eastern-elegance", \
+    }, \
+    @"Shortcut Blue" : @{ \
+        @"uuid" : @"4D0C95A7-2474-4891-BA1E-59BFFA99D71F", \
+        @"notification" : @"Ein bläuliches Beacon ist in der Nähe…", \
+        @"url" : @"https://en.wikipedia.org/wiki/Blue", \
+}, \
+}
+
+@interface AppDelegate () <CLLocationManagerDelegate>
+
+@property (strong, nonatomic) CLLocationManager *locationManager;
 
 @end
 
+
 @implementation AppDelegate
 
+- (NSArray *)regionsToMonitor
+{
+    NSMutableArray *regions = [NSMutableArray array];
+    
+    for (NSString *identifier in REGIONS) {
+        NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:REGIONS[identifier][@"uuid"]];
+        CLBeaconRegion *region = [[CLBeaconRegion alloc] initWithProximityUUID:uuid identifier:identifier];
+        [regions addObject:region];
+    }
+    
+    return regions;
+}
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    // Override point for customization after application launch.
+    
+    [UIApplication sharedApplication].applicationIconBadgeNumber = 0;
+    
+    self.locationManager = [[CLLocationManager alloc] init];
+    self.locationManager.delegate = self;
+    
+    // needs "always" auth for background monitoring...
+    [self.locationManager requestAlwaysAuthorization];
+    
+    // needs to prompt for notifications...
+    UIUserNotificationSettings *notificationSettings = [UIUserNotificationSettings settingsForTypes:UIUserNotificationTypeAlert|UIUserNotificationTypeBadge|UIUserNotificationTypeSound categories:nil];
+    [[UIApplication sharedApplication] registerUserNotificationSettings:notificationSettings];
+    
+    // cleanup: remove all monitorings to clean out legacy monitorings
+    for (CLBeaconRegion *region in self.locationManager.monitoredRegions) {
+        [self.locationManager stopMonitoringForRegion:region];
+    }
+    
+    // start monitoring for all regions
+    for (CLBeaconRegion *region in self.regionsToMonitor) {
+        [self.locationManager requestStateForRegion:region];
+    }
+    
     return YES;
 }
 
-- (void)applicationWillResignActive:(UIApplication *)application {
-    // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
-    // Use this method to pause ongoing tasks, disable timers, and throttle down OpenGL ES frame rates. Games should use this method to pause the game.
+- (void)application:(UIApplication *)application didReceiveLocalNotification:(UILocalNotification *)notification
+{
+    NSString *identifier = notification.userInfo[@"regionIdentifier"];
+    if (identifier) {
+        NSURL *url = [NSURL URLWithString:REGIONS[identifier][@"url"] ];
+        [self showWebsite:url];
+    }
+    
+    [UIApplication sharedApplication].applicationIconBadgeNumber = 0;
 }
 
-- (void)applicationDidEnterBackground:(UIApplication *)application {
-    // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
-    // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
+#pragma mark - CLLocationManagerDelegate
+
+- (void)locationManager:(CLLocationManager *)manager didFailWithError:(NSError *)error
+{
+    NSLog(@"LM error: %ld - %@", (long)error.code, error.debugDescription);
 }
 
-- (void)applicationWillEnterForeground:(UIApplication *)application {
-    // Called as part of the transition from the background to the inactive state; here you can undo many of the changes made on entering the background.
+- (void)locationManager:(CLLocationManager *)manager didChangeAuthorizationStatus:(CLAuthorizationStatus)status
+{
+    for (CLBeaconRegion *region in self.regionsToMonitor) {
+        [self.locationManager requestStateForRegion:region];
+    }
 }
 
-- (void)applicationDidBecomeActive:(UIApplication *)application {
-    // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+- (void)locationManager:(CLLocationManager *)manager didDetermineState:(CLRegionState)state forRegion:(CLRegion *)region
+{
+    NSLog(@"LM did determine state of region %@: %ld", region.identifier, (long)state);
+    
+    if (![manager.monitoredRegions containsObject:region]) {
+        NSLog(@"LM starts monitoring region %@", region.identifier);
+        [self.locationManager startMonitoringForRegion:region];
+    }
+    
+    if (state == CLRegionStateInside) {
+        [self locationManager:manager didEnterRegion:region];
+    }
 }
 
-- (void)applicationWillTerminate:(UIApplication *)application {
-    // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
+- (void)locationManager:(CLLocationManager *)manager didEnterRegion:(CLRegion *)region
+{
+    NSLog(@"LM did enter region %@", region.identifier);
+    
+    UILocalNotification *notification = [[UILocalNotification alloc] init];
+    notification.alertBody   = REGIONS[region.identifier][@"notification"];
+    notification.alertAction = @"Show";
+    notification.soundName   = UILocalNotificationDefaultSoundName;
+    notification.userInfo    = @{@"regionIdentifier" : region.identifier};
+    [[UIApplication sharedApplication] presentLocalNotificationNow:notification];
+    
+    [UIApplication sharedApplication].applicationIconBadgeNumber++;
+}
+
+- (void)locationManager:(CLLocationManager *)manager didExitRegion:(CLRegion *)region
+{
+    NSLog(@"LM did leave region %@", region.identifier);
+    
+    [self showWebsite:nil];
+}
+
+- (void)locationManager:(CLLocationManager *)manager monitoringDidFailForRegion:(CLRegion *)region withError:(NSError *)error
+{
+    NSLog(@"LM did fail to monitor region %@: %ld - %@", region.identifier, (long)error.code, error.debugDescription);
+}
+
+#pragma mark - Web view handling
+
+- (void)showWebsite:(NSURL *)url
+{
+    if (url) {
+        if (!self.window.rootViewController.presentedViewController) {
+            UIStoryboard *storyboard = self.window.rootViewController.storyboard;
+            WebViewController *webViewController = (WebViewController *)[storyboard instantiateViewControllerWithIdentifier:@"webViewController"];
+            webViewController.url = url;
+            [self.window.rootViewController presentViewController:webViewController animated:YES completion:nil];
+        }
+    } else {
+        if (self.window.rootViewController.presentedViewController) {
+            [self.window.rootViewController dismissViewControllerAnimated:YES completion:nil];
+        }
+    }
 }
 
 @end

@@ -7,6 +7,8 @@
 //
 
 #import "AppDelegate.h"
+
+#import "MainViewController.h"
 #import "WebViewController.h"
 
 #import <CoreLocation/CoreLocation.h>
@@ -27,6 +29,9 @@
 @interface AppDelegate () <CLLocationManagerDelegate>
 
 @property (strong, nonatomic) CLLocationManager *locationManager;
+
+@property (strong, nonatomic) MainViewController *mainViewController;
+@property (strong, nonatomic) WebViewController *webViewController;
 
 @end
 
@@ -69,6 +74,14 @@
     for (CLBeaconRegion *region in self.regionsToMonitor) {
         [self.locationManager requestStateForRegion:region];
     }
+    
+    UIStoryboard *storyboard = [UIStoryboard storyboardWithName:@"Main" bundle:nil];
+    self.mainViewController = [storyboard instantiateViewControllerWithIdentifier:@"mainViewController"];
+    self.webViewController  = [storyboard instantiateViewControllerWithIdentifier:@"webViewController"];
+    
+    self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+    self.window.rootViewController = self.mainViewController;
+    [self.window makeKeyAndVisible];
     
     return YES;
 }
@@ -165,15 +178,13 @@
 - (void)showWebsite:(NSURL *)url
 {
     if (url) {
-        if (!self.window.rootViewController.presentedViewController) {
-            UIStoryboard *storyboard = self.window.rootViewController.storyboard;
-            WebViewController *webViewController = (WebViewController *)[storyboard instantiateViewControllerWithIdentifier:@"webViewController"];
-            [self.window.rootViewController presentViewController:webViewController animated:YES completion:nil];
+        if (!self.mainViewController.presentedViewController) {
+            [self.mainViewController presentViewController:self.webViewController animated:YES completion:nil];
         }
-        ((WebViewController *)self.window.rootViewController.presentedViewController).url = url;
+        self.webViewController.url = url;
     } else {
-        if (self.window.rootViewController.presentedViewController) {
-            [self.window.rootViewController dismissViewControllerAnimated:YES completion:nil];
+        if (self.mainViewController.presentedViewController) {
+            [self.mainViewController dismissViewControllerAnimated:YES completion:nil];
         }
     }
 }

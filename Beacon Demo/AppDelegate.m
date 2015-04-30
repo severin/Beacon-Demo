@@ -48,7 +48,7 @@
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     
-    [UIApplication sharedApplication].applicationIconBadgeNumber = 0;
+    [self resetNotifications];
     
     self.locationManager = [[CLLocationManager alloc] init];
     self.locationManager.delegate = self;
@@ -81,7 +81,7 @@
         [self showWebsite:url];
     }
     
-    [UIApplication sharedApplication].applicationIconBadgeNumber = 0;
+    [self resetNotifications];
 }
 
 #pragma mark - CLLocationManagerDelegate
@@ -116,14 +116,7 @@
 {
     NSLog(@"LM did enter region %@", region.identifier);
     
-    UILocalNotification *notification = [[UILocalNotification alloc] init];
-    notification.alertBody   = REGIONS[region.identifier][@"notification"];
-    notification.alertAction = @"Show";
-    notification.soundName   = UILocalNotificationDefaultSoundName;
-    notification.userInfo    = @{@"regionIdentifier" : region.identifier};
-    [[UIApplication sharedApplication] presentLocalNotificationNow:notification];
-    
-    [UIApplication sharedApplication].applicationIconBadgeNumber++;
+    [self notifyAboutRegion:region];
 }
 
 - (void)locationManager:(CLLocationManager *)manager didExitRegion:(CLRegion *)region
@@ -137,6 +130,35 @@
 {
     NSLog(@"LM did fail to monitor region %@: %ld - %@", region.identifier, (long)error.code, error.debugDescription);
 }
+
+#pragma mark - Notification handling
+
+- (void)notifyAboutRegion:(CLRegion *)region
+{
+    // keep an array of region identifiers for which notifications were already triggered
+    // in the user defaults...
+    NSArray *regionIdentifiersWithNotification = [NSUserDefaults.standardUserDefaults valueForKey:@"regionIdentifiersWithNotification"];
+    if ([regionIdentifiersWithNotification containsObject:region.identifier]) {
+        return;
+    }
+    [NSUserDefaults.standardUserDefaults setValue:[regionIdentifiersWithNotification arrayByAddingObject:region.identifier] forKey:@"regionIdentifiersWithNotification"];
+    
+    UILocalNotification *notification = [[UILocalNotification alloc] init];
+    notification.alertBody   = REGIONS[region.identifier][@"notification"];
+    notification.alertAction = @"Show";
+    notification.soundName   = UILocalNotificationDefaultSoundName;
+    notification.userInfo    = @{@"regionIdentifier" : region.identifier};
+    [[UIApplication sharedApplication] presentLocalNotificationNow:notification];
+    
+    [UIApplication sharedApplication].applicationIconBadgeNumber++;
+}
+
+- (void)resetNotifications
+{
+    [NSUserDefaults.standardUserDefaults setValue:@[] forKey:@"regionIdentifiersWithNotification"];
+    [UIApplication sharedApplication].applicationIconBadgeNumber = 0;
+}
+
 
 #pragma mark - Web view handling
 

@@ -168,9 +168,9 @@
         if (!self.window.rootViewController.presentedViewController) {
             UIStoryboard *storyboard = self.window.rootViewController.storyboard;
             WebViewController *webViewController = (WebViewController *)[storyboard instantiateViewControllerWithIdentifier:@"webViewController"];
-            webViewController.url = url;
             [self.window.rootViewController presentViewController:webViewController animated:YES completion:nil];
         }
+        ((WebViewController *)self.window.rootViewController.presentedViewController).url = url;
     } else {
         if (self.window.rootViewController.presentedViewController) {
             [self.window.rootViewController dismissViewControllerAnimated:YES completion:nil];

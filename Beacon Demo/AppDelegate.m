@@ -30,6 +30,9 @@
 
 @property (strong, nonatomic) CLLocationManager *locationManager;
 
+@property (strong, nonatomic) NSMutableDictionary *currentBeacons;
+@property (strong, nonatomic) CLBeacon *selectedBeacon;
+
 @property (strong, nonatomic) MainViewController *mainViewController;
 @property (strong, nonatomic) WebViewController *webViewController;
 
@@ -37,6 +40,14 @@
 
 
 @implementation AppDelegate
+
+- (NSMutableDictionary *)currentBeacons
+{
+    if (!_currentBeacons) {
+        _currentBeacons = [NSMutableDictionary dictionary];
+    }
+    return _currentBeacons;
+}
 
 - (NSArray *)regionsToMonitor
 {
@@ -129,19 +140,91 @@
 {
     NSLog(@"LM did enter region %@", region.identifier);
     
-    [self notifyAboutRegion:region];
+    if ([region.class isSubclassOfClass:CLBeaconRegion.class]) {
+        [self.currentBeacons setObject:@[] forKey:region];
+        [manager startRangingBeaconsInRegion:(CLBeaconRegion *)region];
+    }
 }
 
 - (void)locationManager:(CLLocationManager *)manager didExitRegion:(CLRegion *)region
 {
     NSLog(@"LM did leave region %@", region.identifier);
     
-    [self showWebsite:nil];
+    if ([region.class isSubclassOfClass:CLBeaconRegion.class]) {
+        [manager stopRangingBeaconsInRegion:(CLBeaconRegion *)region];
+        [self.currentBeacons removeObjectForKey:region];
+        [self selectBeacon];
+    }
 }
 
 - (void)locationManager:(CLLocationManager *)manager monitoringDidFailForRegion:(CLRegion *)region withError:(NSError *)error
 {
     NSLog(@"LM did fail to monitor region %@: %ld - %@", region.identifier, (long)error.code, error.debugDescription);
+}
+
+- (void)locationManager:(CLLocationManager *)manager didRangeBeacons:(NSArray *)beacons inRegion:(CLBeaconRegion *)region
+{
+    NSLog(@"LM did range beacons in region %@", region.identifier);
+    
+    [self.currentBeacons setObject:beacons forKey:region];
+    [self selectBeacon];
+}
+
+- (void)locationManager:(CLLocationManager *)manager rangingBeaconsDidFailForRegion:(CLBeaconRegion *)region withError:(NSError *)error
+{
+    NSLog(@"LM did fail to range in region %@", region.identifier);
+}
+
+#pragma mark - Beacon tracking
+
+- (void)selectBeacon
+{
+    // find the currently selected and closest beacon
+    CLBeacon *previouslySelectedBeacon, *closestBeacon;
+    for (CLRegion *region in self.currentBeacons) {
+        for (CLBeacon *beacon in self.currentBeacons[region]) {
+            if ([beacon.proximityUUID isEqual:self.selectedBeacon.proximityUUID] &&
+                [beacon.major isEqual:self.selectedBeacon.major] &&
+                [beacon.minor isEqual:self.selectedBeacon.minor]) {
+                previouslySelectedBeacon = beacon;
+            }
+            
+            if (beacon.proximity == CLProximityUnknown) {
+                continue;
+            }
+            
+            if (!closestBeacon) {
+                closestBeacon = beacon;
+            } else if (closestBeacon.proximity == CLProximityFar) {
+                if (beacon.proximity == CLProximityNear || beacon.proximity == CLProximityImmediate) {
+                    closestBeacon = beacon;
+                }
+            } else if (closestBeacon.proximity == CLProximityNear) {
+                if (beacon.proximity == CLProximityImmediate) {
+                    closestBeacon = beacon;
+                }
+            }
+        }
+    }
+    
+    // select the closest beacon
+    self.selectedBeacon = closestBeacon;
+    
+    // if the selected beacon has changed, react...
+    if (self.selectedBeacon != previouslySelectedBeacon) {
+        NSLog(@"selected beacon has changed to %@", self.selectedBeacon);
+        if (self.selectedBeacon) {
+            CLRegion *beaconRegion;
+            for (CLRegion *region in self.currentBeacons) {
+                if ([self.currentBeacons[region] containsObject:self.selectedBeacon]) {
+                    beaconRegion = region;
+                }
+            }
+            [self notifyAboutRegion:beaconRegion];
+        } else {
+            [self showWebsite:nil];
+        }
+    }
 }
 
 #pragma mark - Notification handling

@@ -14,16 +14,16 @@
 #import <CoreLocation/CoreLocation.h>
 
 #define REGIONS @{ \
-    @"H&M Plakat Demo" : @{ \
-        @"uuid" : @"521BE3E0-0E18-4D39-900A-B001F5D69D3E", \
-        @"notification" : @"Haben Sie das H&M Plakat gesehen? Entdecken Sie die schlichte Eleganz des fernen Ostens in unseren Geschäften. Hier mehr erfahren", \
+    @"521BE3E0-0E18-4D39-900A-B001F5D69D3E" : @{ \
+        @"identifier" : @"H&M: Fernöstliche Eleganz", \
+        @"notification" : @"Haben Sie das H&M Plakat gesehen? Entdecken Sie die schlichte Eleganz des fernen Ostens in unseren Geschäften. Hier mehr erfahren…", \
         @"url" : @"http://www.hm.com/ch/eastern-elegance", \
     }, \
-    @"Shortcut Blue" : @{ \
-        @"uuid" : @"4D0C95A7-2474-4891-BA1E-59BFFA99D71F", \
-        @"notification" : @"Ein bläuliches Beacon ist in der Nähe…", \
-        @"url" : @"https://en.wikipedia.org/wiki/Blue", \
-}, \
+    @"4D0C95A7-2474-4891-BA1E-59BFFA99D71F" : @{ \
+        @"identifier" : @"H&M: Der Sommer kommt", \
+        @"notification" : @"Haben Sie das H&M Plakat gesehen? Der Sommer kommt! Hier mehr erfahren…", \
+        @"url" : @"http://www.hm.com/ch/summer-starts-now", \
+    }, \
 }
 
 @interface AppDelegate () <CLLocationManagerDelegate>
@@ -53,8 +53,9 @@
 {
     NSMutableArray *regions = [NSMutableArray array];
     
-    for (NSString *identifier in REGIONS) {
-        NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:REGIONS[identifier][@"uuid"]];
+    for (NSString *uuidString in REGIONS) {
+        NSUUID *uuid = [[NSUUID alloc] initWithUUIDString:uuidString];
+        NSString *identifier = REGIONS[uuidString][@"identifier"];
         CLBeaconRegion *region = [[CLBeaconRegion alloc] initWithProximityUUID:uuid identifier:identifier];
         [regions addObject:region];
     }
@@ -99,9 +100,9 @@
 
 - (void)application:(UIApplication *)application didReceiveLocalNotification:(UILocalNotification *)notification
 {
-    NSString *identifier = notification.userInfo[@"regionIdentifier"];
-    if (identifier) {
-        NSURL *url = [NSURL URLWithString:REGIONS[identifier][@"url"] ];
+    NSString *uuid = notification.userInfo[@"regionUUID"];
+    if (uuid) {
+        NSURL *url = [NSURL URLWithString:REGIONS[uuid][@"url"] ];
         [self showWebsite:url];
     }
     
@@ -214,8 +215,8 @@
     if (self.selectedBeacon != previouslySelectedBeacon) {
         NSLog(@"selected beacon has changed to %@", self.selectedBeacon);
         if (self.selectedBeacon) {
-            CLRegion *beaconRegion;
-            for (CLRegion *region in self.currentBeacons) {
+            CLBeaconRegion *beaconRegion;
+            for (CLBeaconRegion *region in self.currentBeacons) {
                 if ([self.currentBeacons[region] containsObject:self.selectedBeacon]) {
                     beaconRegion = region;
                 }
@@ -229,7 +230,7 @@
 
 #pragma mark - Notification handling
 
-- (void)notifyAboutRegion:(CLRegion *)region
+- (void)notifyAboutRegion:(CLBeaconRegion *)region
 {
     // keep an array of region identifiers for which notifications were already triggered
     // in the user defaults...
@@ -240,10 +241,10 @@
     [NSUserDefaults.standardUserDefaults setValue:[regionIdentifiersWithNotification arrayByAddingObject:region.identifier] forKey:@"regionIdentifiersWithNotification"];
     
     UILocalNotification *notification = [[UILocalNotification alloc] init];
-    notification.alertBody   = REGIONS[region.identifier][@"notification"];
+    notification.alertBody   = REGIONS[region.proximityUUID.UUIDString][@"notification"];
     notification.alertAction = @"Show";
     notification.soundName   = UILocalNotificationDefaultSoundName;
-    notification.userInfo    = @{@"regionIdentifier" : region.identifier};
+    notification.userInfo    = @{@"regionUUID" : region.proximityUUID.UUIDString};
     [[UIApplication sharedApplication] presentLocalNotificationNow:notification];
     
     [UIApplication sharedApplication].applicationIconBadgeNumber++;

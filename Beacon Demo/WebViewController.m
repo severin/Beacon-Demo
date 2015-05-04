@@ -16,9 +16,6 @@
 @property (weak, nonatomic) IBOutlet UIBarButtonItem *forwardButton;
 @property (strong, nonatomic) IBOutlet UIBarButtonItem *loadingItem;
 
-
-@property (assign, nonatomic) NSUInteger requestCount;
-
 @end
 
 @implementation WebViewController
@@ -29,7 +26,7 @@
     
     if (self.webView) {
         // TODO: clear history
-        [self.webView loadRequest:[NSURLRequest requestWithURL:_url]];
+        [self loadURL:_url];
     }
 }
 
@@ -41,7 +38,15 @@
     self.webView.hidden = YES;
     
     if (self.url) {
-        [self.webView loadRequest:[NSURLRequest requestWithURL:self.url]];
+        [self loadURL:self.url];
+    }
+}
+
+- (void)loadURL:(NSURL *)url
+{
+    if (![self.webView.request.URL isEqual:url]) {
+        [self.webView stopLoading];
+        [self.webView loadRequest:[NSURLRequest requestWithURL:url]];
     }
 }
 
@@ -49,20 +54,12 @@
 
 - (void)webViewDidStartLoad:(UIWebView *)webView
 {
-    @synchronized(self) {
-        self.requestCount++;
-    }
-    
     [self updateToolbar];
 }
 
 - (void)webViewDidFinishLoad:(UIWebView *)webView
 {
-    @synchronized(self) {
-        self.requestCount--;
-    }
-    
-    if (self.requestCount == 0) {
+    if (!self.webView.loading) {
         self.webView.hidden = NO;
     }
     
@@ -73,7 +70,7 @@
 
 - (void)updateToolbar
 {
-    if (self.requestCount == 0) {
+    if (!self.webView.loading) {
         if ([self.toolbar.items containsObject:self.loadingItem]) {
             NSMutableArray *newItems = [NSMutableArray arrayWithArray:self.toolbar.items];
             [newItems removeObject:self.loadingItem];

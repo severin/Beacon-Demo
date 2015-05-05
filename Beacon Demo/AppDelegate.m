@@ -13,6 +13,34 @@
 
 #import <CoreLocation/CoreLocation.h>
 
+@interface NilBeacon : CLBeacon
+@end
+
+@implementation NilBeacon
+
+- (NSUUID *)proximityUUID
+{
+    return [[NSUUID alloc] initWithUUIDString:@"00000000-0000-0000-0000-000000000000"];
+}
+
+- (NSNumber *)major
+{
+    return @-1;
+}
+
+- (NSNumber *)minor
+{
+    return @-1;
+}
+
+- (NSString *)description
+{
+    return @"NilBeacon";
+}
+
+@end
+
+
 #define REGIONS @{ \
     @"521BE3E0-0E18-4D39-900A-B001F5D69D3E" : @{ \
         @"identifier" : @"H&M: Fernöstliche Eleganz", \
@@ -231,9 +259,11 @@
     int HISTORY_SIZE = 4;
     if (closestBeacon) {
         [self.closestBeaconHistory addObject:closestBeacon];
-    } else if (self.closestBeaconHistory.count) {
-        [self.closestBeaconHistory removeObjectAtIndex:0];
+    } else {
+        NilBeacon *nilBeacon = [[NilBeacon alloc] init];
+        [self.closestBeaconHistory addObject:nilBeacon];
     }
+    
     while (self.closestBeaconHistory.count > HISTORY_SIZE) {
         [self.closestBeaconHistory removeObjectAtIndex:0];
     }
@@ -249,7 +279,7 @@
                                                                    [beacon1.minor isEqual:beacon2.minor];
         }
     }
-    
+        
     // if the last closest beacons are the same...
     if (closestBeaconWasConstant) {
         // ...select the closest beacon

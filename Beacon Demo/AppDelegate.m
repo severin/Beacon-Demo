@@ -31,6 +31,7 @@
 @property (strong, nonatomic) CLLocationManager *locationManager;
 
 @property (strong, nonatomic) NSMutableDictionary *currentBeacons;
+@property (strong, nonatomic) NSMutableArray *closestBeaconHistory;
 @property (strong, nonatomic) CLBeacon *selectedBeacon;
 
 @property (strong, nonatomic) MainViewController *mainViewController;
@@ -47,6 +48,14 @@
         _currentBeacons = [NSMutableDictionary dictionary];
     }
     return _currentBeacons;
+}
+
+- (NSMutableArray *)closestBeaconHistory
+{
+    if (!_closestBeaconHistory) {
+        _closestBeaconHistory = [NSMutableArray array];
+    }
+    return _closestBeaconHistory;
 }
 
 - (NSArray *)regionsToMonitor
@@ -180,16 +189,26 @@
 
 - (void)selectBeacon
 {
-    // find the currently selected and closest beacon
-    CLBeacon *previouslySelectedBeacon, *closestBeacon;
+    // find the currently selected beacon
+    CLBeacon *previouslySelectedBeacon;
     for (CLRegion *region in self.currentBeacons) {
         for (CLBeacon *beacon in self.currentBeacons[region]) {
             if ([beacon.proximityUUID isEqual:self.selectedBeacon.proximityUUID] &&
                 [beacon.major isEqual:self.selectedBeacon.major] &&
                 [beacon.minor isEqual:self.selectedBeacon.minor]) {
                 previouslySelectedBeacon = beacon;
+                break;
             }
-            
+        }
+    }
+    
+    // find the closest beacon
+    CLBeacon *closestBeacon;
+    if (previouslySelectedBeacon.proximity != CLProximityUnknown) {
+        closestBeacon = previouslySelectedBeacon;
+    }
+    for (CLRegion *region in self.currentBeacons) {
+        for (CLBeacon *beacon in self.currentBeacons[region]) {
             if (beacon.proximity == CLProximityUnknown) {
                 continue;
             }
@@ -208,22 +227,48 @@
         }
     }
     
-    // select the closest beacon
-    self.selectedBeacon = closestBeacon;
+    // keep history of closest beacons
+    int HISTORY_SIZE = 4;
+    if (closestBeacon) {
+        [self.closestBeaconHistory addObject:closestBeacon];
+    } else if (self.closestBeaconHistory.count) {
+        [self.closestBeaconHistory removeObjectAtIndex:0];
+    }
+    while (self.closestBeaconHistory.count > HISTORY_SIZE) {
+        [self.closestBeaconHistory removeObjectAtIndex:0];
+    }
     
-    // if the selected beacon has changed, react...
-    if (self.selectedBeacon != previouslySelectedBeacon) {
-        NSLog(@"selected beacon has changed to %@", self.selectedBeacon);
-        if (self.selectedBeacon) {
-            CLBeaconRegion *beaconRegion;
-            for (CLBeaconRegion *region in self.currentBeacons) {
-                if ([self.currentBeacons[region] containsObject:self.selectedBeacon]) {
-                    beaconRegion = region;
+    // check if the closest beacon was constant
+    BOOL closestBeaconWasConstant = YES;
+    if (self.closestBeaconHistory.count) {
+        for(int i = 0; i < self.closestBeaconHistory.count-1; i++) {
+            CLBeacon *beacon1 = self.closestBeaconHistory[i];
+            CLBeacon *beacon2 = self.closestBeaconHistory[i+1];
+            closestBeaconWasConstant = closestBeaconWasConstant && [beacon1.proximityUUID isEqual:beacon2.proximityUUID] &&
+                                                                   [beacon1.major isEqual:beacon2.major] &&
+                                                                   [beacon1.minor isEqual:beacon2.minor];
+        }
+    }
+    
+    // if the last closest beacons are the same...
+    if (closestBeaconWasConstant) {
+        // ...select the closest beacon
+        self.selectedBeacon = closestBeacon;
+        
+        // if the selected beacon has changed, react...
+        if (self.selectedBeacon != previouslySelectedBeacon) {
+            NSLog(@"selected beacon has changed to %@", self.selectedBeacon);
+            if (self.selectedBeacon) {
+                CLBeaconRegion *beaconRegion;
+                for (CLBeaconRegion *region in self.currentBeacons) {
+                    if ([self.currentBeacons[region] containsObject:self.selectedBeacon]) {
+                        beaconRegion = region;
+                    }
                 }
+                [self notifyAboutRegion:beaconRegion];
+            } else {
+                [self showWebsite:nil];
             }
-            [self notifyAboutRegion:beaconRegion];
-        } else {
-            [self showWebsite:nil];
         }
     }
 }
